@@ -1,107 +1,62 @@
 (ns proto-to-malli.core
-  (:require [instaparse.core :as insta]
-            [clojure.string :as str]))
-
-(def proto-grammar
-  "
-  PROTO = SYNTAX (IMPORTS | OPTION_STMT)* PACKAGE? (MESSAGE | ENUM | OPTION_STMT)*
-  SYNTAX = <'syntax'> <'='> <'\"'> 'proto3' <'\"'> <';'>
-  IMPORTS = <'import'> <'\"'> DOTTED_IDENTIFIER <'\"'> <';'>
-  OPTION_STMT = <'option'> OPTION_KEY <'='> CONSTANT <';'>
-  PACKAGE = <'package'> DOTTED_IDENTIFIER <';'>
-
-  ENUM = <'enum'> IDENTIFIER <'{'> ENUM_FIELD* <'}'>
-  ENUM_FIELD = IDENTIFIER <'='> NUMBER <';'>
-
-  MESSAGE = COMMENT? <'message'> IDENTIFIER <'{'> (FIELD | MAP_FIELD | ONEOF | MESSAGE | RESERVED | OPTION_STMT)* <'}'>
-
-  FIELD = COMMENT? REPEATED? TYPE IDENTIFIER <'='> NUMBER OPTIONS? <';'>
-  REPEATED = 'repeated'
-
-  RESERVED = <'reserved'> (NUMBER_RANGE | QUOTED_STRING) ( <','> (NUMBER_RANGE | QUOTED_STRING) )* <';'>
-  NUMBER_RANGE = NUMBER | NUMBER <'to'> NUMBER
-  QUOTED_STRING = #'\"[^\"]*\"'
-
-  OPTIONS = <'['> OPTION ( <','> OPTION )* <']'>
-  OPTION = OPTION_KEY <'='> CONSTANT
-  OPTION_KEY = IDENTIFIER | <'('> DOTTED_IDENTIFIER <')'>
-  CONSTANT = #'[^,\\];]+'
-
-  MAP_FIELD = <'map'> <'<'> KEY_TYPE <','> TYPE <'>'> IDENTIFIER <'='> NUMBER <';'>
-  KEY_TYPE = 'int32' | 'int64' | 'uint32' | 'uint64' | 'sint32' | 'sint64' |
-             'fixed32' | 'fixed64' | 'sfixed32' | 'sfixed64' | 'bool' | 'string'
-
-  ONEOF = <'oneof'> IDENTIFIER <'{'> ONEOF_FIELD* <'}'>
-  ONEOF_FIELD = TYPE IDENTIFIER <'='> NUMBER <';'>
-
-  TYPE = SCALAR | DOTTED_IDENTIFIER
-  SCALAR = 'double' | 'float' | 'int32' | 'int64' | 'uint32' | 'uint64' |
-           'sint32' | 'sint64' | 'fixed32' | 'fixed64' | 'sfixed32' | 'sfixed64' |
-           'bool' | 'string' | 'bytes'
-
-  IDENTIFIER = #'[a-zA-Z_][a-zA-Z0-9_]*'
-  DOTTED_IDENTIFIER = #'[a-zA-Z_][a-zA-Z0-9_./]*'
-  NUMBER = #'[0-9]+'
-  COMMENT = #'//.*'
-  WS = #'\\s+'
-  ")
-
-(def parser
-  (insta/parser proto-grammar :auto-whitespace :WS))
+  (:require [rubberbuf.core :as rubber]
+            [rubberbuf.ast-postprocess :as post]
+            [clojure.string :as str]
+            [clojure.java.io :as io]))
 
 (def default-mapping
-  {"double"   :double
-   "float"    :double
-   "int32"    :int
-   "int64"    :int
-   "uint32"   :int
-   "uint64"   :int
-   "sint32"   :int
-   "sint64"   :int
-   "fixed32"  :int
-   "fixed64"  :int
-   "sfixed32" :int
-   "sfixed64" :int
-   "bool"     :boolean
-   "string"   :string
-   "bytes"    :bytes
-   "google.protobuf.Any" :any})
+  {:double   :double
+   :float    :double
+   :int32    :int
+   :int64    :int
+   :uint32   :int
+   :uint64   :int
+   :sint32   :int
+   :sint64   :int
+   :fixed32  :int
+   :fixed64  :int
+   :sfixed32 :int
+   :sfixed64 :int
+   :bool     :boolean
+   :string   :string
+   :bytes    :bytes
+   :any      :any}) ;; google.protobuf.Any mapping if detected?
 
 (def java-mapping
-  {"double"   :double
-   "float"    :float
-   "int32"    :int
-   "int64"    :long
-   "uint32"   :int
-   "uint64"   :long
-   "sint32"   :int
-   "sint64"   :long
-   "fixed32"  :int
-   "fixed64"  :long
-   "sfixed32" :int
-   "sfixed64" :long
-   "bool"     :boolean
-   "string"   :string
-   "bytes"    :bytes ;; byte[]
-   "google.protobuf.Any" :any})
+  {:double   :double
+   :float    :float
+   :int32    :int
+   :int64    :long
+   :uint32   :int
+   :uint64   :long
+   :sint32   :int
+   :sint64   :long
+   :fixed32  :int
+   :fixed64  :long
+   :sfixed32 :int
+   :sfixed64 :long
+   :bool     :boolean
+   :string   :string
+   :bytes    :bytes
+   :any      :any})
 
 (def js-mapping
-  {"double"   :double   ;; Number
-   "float"    :double   ;; Number
-   "int32"    :int      ;; Number
-   "int64"    :string   ;; String
-   "uint32"   :int      ;; Number
-   "uint64"   :string   ;; String
-   "sint32"   :int      ;; Number
-   "sint64"   :string   ;; String
-   "fixed32"  :int      ;; Number
-   "fixed64"  :string   ;; String
-   "sfixed32" :int      ;; Number
-   "sfixed64" :string   ;; String
-   "bool"     :boolean
-   "string"   :string
-   "bytes"    :string   ;; base64 string
-   "google.protobuf.Any" :any})
+  {:double   :double
+   :float    :double
+   :int32    :int
+   :int64    :string
+   :uint32   :int
+   :uint64   :string
+   :sint32   :int
+   :sint64   :string
+   :fixed32  :int
+   :fixed64  :string
+   :sfixed32 :int
+   :sfixed64 :string
+   :bool     :boolean
+   :string   :string
+   :bytes    :string
+   :any      :any})
 
 (defn get-mapping [target]
   (case target
@@ -110,232 +65,128 @@
     :clojure default-mapping
     default-mapping))
 
-(defn dotted-to-keyword [s]
-  (if (str/includes? s ".")
-    (let [parts (str/split s #"\.")]
-      (keyword (str/join "." (butlast parts)) (last parts)))
-    (keyword s)))
+(defn resolve-type [mapping type-str]
+  (if (keyword? type-str)
+    (get mapping type-str type-str)
+    ;; If it's a string, it's a reference to another message/enum
+    (let [parts (str/split type-str #"/")
+          t (if (> (count parts) 1)
+              (keyword (str/join "." (butlast parts)) (last parts))
+              (keyword type-str))]
+      (if (= t :google.protobuf.Any)
+        (get mapping :any :any)
+        t))))
 
-(defn resolve-type [mapping t]
-  (or (get mapping t)
-      (dotted-to-keyword t)))
+(defn transform-options [options]
+  (when options
+    (reduce (fn [acc [k v]]
+              (assoc acc (keyword k) v))
+            {}
+            options)))
 
-(defn parse-value [v]
-  (cond
-    (= v "true") true
-    (= v "false") false
-    (re-matches #"^\".*\"$" v) (subs v 1 (dec (count v)))
-    (re-matches #"^[0-9]+$" v) (Integer/parseInt v)
-    :else v))
+(defn transform-field [mapping field-name field-data]
+  (let [{:keys [type context options key-type val-type oneof-fields]} field-data
+        k (keyword field-name)
+        props (transform-options options)]
 
-(defn parse-comment [c]
-  (str/trim (subs c 2)))
+    (case context
+      :map
+      (let [k-type (resolve-type mapping key-type)
+            v-type (resolve-type mapping val-type)
+            schema [:map-of k-type v-type]]
+        (if props
+          [k props schema]
+          [k schema]))
 
-(defn transform-option [k v]
-  [(keyword k) (parse-value v)])
+      :oneof
+      (let [orn-fields (mapcat (fn [[name data]]
+                                 [(keyword name) (resolve-type mapping (:type data))])
+                               oneof-fields)
+            schema (into [:orn] orn-fields)]
+         [k schema]) ;; Oneof usually doesn't have options on the group itself in Malli mapping, but fields do.
+                     ;; Rubberbuf structures oneof as a field container.
 
-(defn transform-options [& opts]
-  (into {} opts))
+      ;; Default case (required, optional, repeated)
+      (let [base-type (resolve-type mapping type)
+            schema (if (= context :repeated)
+                     [:vector base-type]
+                     base-type)]
+        ;; Check description in options?
+        ;; Rubberbuf seems to parse options.
+        (if props
+          [k props schema]
+          [k schema])))))
 
-(defn merge-options [base-opts new-opts]
-  (if (empty? new-opts)
-    base-opts
-    (merge base-opts new-opts)))
+(defn transform-message [mapping msg-data]
+  (let [fields (:fields msg-data)
+        ;; Fields is a map "name" -> data.
+        ;; We need to sort by field id (:fid) to be deterministic? Or just map.
+        ;; Malli map order doesn't strictly matter but nice for testing.
+        sorted-fields (sort-by (fn [[_ v]] (:fid v)) fields)
+        malli-fields (map (fn [[k v]] (transform-field mapping k v)) sorted-fields)]
+    (into [:map] malli-fields)))
 
-(defn transform-field
-  ([mapping comment? type identifier _number]
-   (transform-field mapping comment? nil type identifier _number nil))
-  ([mapping comment? _repeated type identifier _number]
-   (transform-field mapping comment? _repeated type identifier _number nil))
-  ([mapping comment? type identifier _number options]
-    (transform-field mapping comment? nil type identifier _number options))
-  ([mapping comment? _repeated type identifier _number options]
-   (let [desc (when (string? comment?) {:description (parse-comment comment?)})
-         opts (merge-options (or options {}) desc)
-         key-id (keyword identifier)
-         val-type (resolve-type mapping type)
-         val-schema (if _repeated [:vector val-type] val-type)]
-     (if (seq opts)
-       [key-id opts val-schema]
-       [key-id val-schema]))))
+(defn transform-enum [enum-data]
+  (let [fields (:enum-fields enum-data)
+        ;; fields is "NAME" -> {:value 0 ...}
+        ;; We want [:enum :NAME ...]
+        ;; Wait, Malli :enum is usually values? `[:enum "ZERO" "ONE"]` or `[:enum :ZERO :ONE]`?
+        ;; My previous implementation used keywords `[:enum :ZERO :ONE]`.
+        ;; Rubberbuf gives strings.
+        sorted-fields (sort-by (fn [[_ v]] (:value v)) fields)
+        enums (map (fn [[k _]] (keyword k)) sorted-fields)]
+    (into [:enum] enums)))
 
-;; Helper to dispatch based on arity for transform-field is tricky with instaparse transform.
-;; I need to unify the args.
-;; But instaparse passes arguments as is.
-;; The optional parts (COMMENT, REPEATED, OPTIONS) make the arity variable.
-;; I will define a variadic function and inspect args.
-
-(defn transform-field-variadic [mapping & args]
-  (let [comment (when (str/starts-with? (first args) "//") (first args))
-        args (if comment (rest args) args)
-        repeated (when (= (first args) "repeated") (first args))
-        args (if repeated (rest args) args)
-        type (first args)
-        identifier (second args)
-        _number (nth args 2)
-        options (nth args 3 nil)
-
-        desc (when comment {:description (parse-comment comment)})
-        opts (merge-options (or options {}) desc)
-        key-id (keyword identifier)
-        val-type (resolve-type mapping type)
-        val-schema (if repeated [:vector val-type] val-type)]
-    (if (seq opts)
-      [key-id opts val-schema]
-      [key-id val-schema])))
-
-
-(defn transform-map-field [mapping key-type value-type identifier _number]
-  [(keyword identifier) [:map-of (resolve-type mapping key-type) (resolve-type mapping value-type)]])
-
-(defn transform-oneof-field [mapping type identifier _number]
-  [(keyword identifier) (resolve-type mapping type)])
-
-(defn transform-oneof [identifier & fields]
-  [(keyword identifier) (into [:orn] (mapcat identity fields))])
-
-(defn transform-enum-field [identifier _number]
-  (keyword identifier))
-
-(defn transform-enum [identifier & fields]
-  [(keyword identifier) (into [:enum] fields)])
-
-(defn transform-message [comment? identifier & contents]
-  (let [[comment identifier contents] (if (str/starts-with? comment? "//")
-                                        [comment? identifier contents]
-                                        [nil comment? (cons identifier contents)])
-
-        ;; Filter out ignored items (nil)
-        valid-contents (remove nil? contents)
-
-        ;; Separate fields from inner messages
-        fields (filter vector? valid-contents)
-
-        ;; Inner messages are already transformed into [k v], need to be returned?
-        ;; But transform-message is expected to return [key val] for the map.
-        ;; If I have inner messages, they should be part of the registry, not the map?
-        ;; This is the hard part. Instaparse constructs tree bottom up.
-        ;; A MESSAGE returns a [key schema].
-        ;; If there are inner messages, they are in `contents`.
-        ;; We want to bubble them up?
-        ;; Or, we can return a special structure `{:schema [key val] :inner [...]}`?
-        ;; Let's try flattening.
-
-        inner-messages (filter (fn [x] (and (map? x) (:inner x))) valid-contents) ;; hacky check?
-        ;; Actually, previously MESSAGE returned [keyword [:map ...]]
-        ;; Now it might contain other messages.
-        ;; If I change MESSAGE to return `{:name ident :schema schema :inner [...]}` it might be easier.
-
-        ;; Wait, valid-contents contains:
-        ;; - Fields: [:key schema]
-        ;; - Inner Messages: [key schema] (from recursive transform-message)
-
-        fields-only (filter (fn [x] (keyword? (first x))) fields)
-
-        fields-map (into [:map] fields-only)
-        fields-map (if comment
-                     (into [:map {:description (parse-comment comment)}] fields-only)
-                     fields-map)]
-
-    ;; I need to return something that `transform-proto` can handle.
-    ;; `transform-proto` expects a list of message vectors `[key schema]`.
-    ;; If I return a list of message vectors, `transform-proto` handles it?
-    ;; But MESSAGE is inside MESSAGE.
-    ;; If `transform-message` returns a sequence of messages, then the parent `transform-message` will receive them in `contents`.
-    ;; So `contents` will have `[:field ...]`, `[:field ...]`, `[:InnerMsg ...]`.
-    ;; I need to separate them.
-
-    (let [self-entry [(keyword identifier) fields-map]
-          inner-entries (filter (fn [x] (keyword? (first x)))
-                                (remove (set fields-only) fields))]
-       (cons self-entry inner-entries))))
-
-(defn transform-package [pkg]
-  {:package pkg})
-
-(defn transform-proto [& elements]
-  (let [pkg (some #(when (and (map? %) (:package %)) (:package %)) elements)
-
-        ;; Elements might be nested lists because of transform-message returning list.
-        ;; Flatten one level?
-        flat-elements (flatten elements)
-        ;; Wait, flatten destroys vectors.
-        ;; I need a tree-seq or explicit flattening of lists but keeping vectors.
-
-        normalize (fn normalize [x]
-                    (if (and (seq? x) (not (vector? x)))
-                      (mapcat normalize x)
-                      [x]))
-
-        all-items (mapcat normalize elements)
-
-        types (filter vector? all-items)
-
-        qualify (fn [k]
-                  ;; If k has namespace, keep it? Or prepend package?
-                  ;; If k is :Outer.Inner, and package is P.
-                  ;; :P/Outer.Inner?
-                  ;; :foo.bar/Open is already qualified.
-                  ;; Current logic: (keyword (str pkg "." (name k)))
-                  ;; If k is :Outer, name is "Outer".
-                  ;; If k is :Outer.Inner, name is "Outer.Inner".
-                  (if pkg
-                    (keyword (str pkg "." (name k)))
-                    k))
-
-        registry (reduce (fn [acc [k v]]
-                           (assoc acc (qualify k) v))
-                         {}
-                         types)
-        ;; Last message is the main one?
-        ;; With nested types, the "main" one is the one that wraps them.
-        ;; It appears last in the `transform-message` output list usually (self-entry is first, but parent calls come last in proto execution order? No, parser returns list of messages).
-        ;; In `transform-proto`, `elements` is list of results of `MESSAGE`.
-        ;; `MESSAGE` returns `(self-entry inner...)`.
-        ;; So `elements` is `((Msg1 inner...) (Msg2 ...))`.
-        ;; The last element of `elements` is the last defined message in file.
-        last-type-key (some-> (last elements) first first qualify)]
-    [:schema {:registry registry} last-type-key]))
-
-(defn parse
-  ([proto-content] (parse proto-content {}))
-  ([proto-content {:keys [target] :or {target :clojure}}]
-   (let [parsed (parser proto-content)
-         mapping (get-mapping target)]
-     (if (insta/failure? parsed)
-       parsed
-       (insta/transform
-        {:FIELD (partial transform-field-variadic mapping)
-         :MAP_FIELD (partial transform-map-field mapping)
-         :ONEOF transform-oneof
-         :ONEOF_FIELD (partial transform-oneof-field mapping)
-         :ENUM_FIELD transform-enum-field
-         :ENUM transform-enum
-         :MESSAGE transform-message
-         :PROTO transform-proto
-         :PACKAGE transform-package
-         :TYPE str
-         :KEY_TYPE str
-         :SCALAR str
-         :IDENTIFIER str
-         :DOTTED_IDENTIFIER str
-         :NUMBER str
-         :SYNTAX (fn [_] nil)
-         :IMPORTS (fn [& _] nil)
-         :OPTION_STMT (fn [& _] nil)
-         :REPEATED str
-         :RESERVED (fn [& _] nil) ;; Ignore reserved
-         :OPTION transform-option
-         :OPTIONS transform-options
-         :OPTION_KEY str
-         :QUOTED_STRING str
-         :NUMBER_RANGE str
-         :CONSTANT str
-         :COMMENT str
-         :WS (fn [_] nil)}
-        parsed)))))
+(defn transform-ast [mapping ast-map]
+  (reduce (fn [registry [name data]]
+            (let [k (resolve-type mapping name)]
+              (case (:context data)
+                :message (assoc registry k (transform-message mapping data))
+                :enum (assoc registry k (transform-enum data))
+                :service registry ;; Ignore services for now
+                registry)))
+          {}
+          ast-map))
 
 (defn parse-file
   ([filepath] (parse-file filepath {}))
-  ([filepath opts]
-   (parse (slurp filepath) opts)))
+  ([filepath {:keys [target] :or {target :clojure}}]
+   (let [file (io/file filepath)
+         dir (.getParent file)
+         filename (.getName file)
+         ;; Rubberbuf protoc expects paths and files.
+         ast (rubber/protoc [dir] [filename])
+         ;; Unnest and Mapify
+         unnested (post/unnest ast)
+         mapified (post/mapify unnested)
+         ;; Transform to Malli
+         mapping (get-mapping target)
+         registry (transform-ast mapping mapified)
+
+         ;; Determine the "main" type key.
+         ;; Rubberbuf map keys are qualified "package/Name".
+         ;; If we just parsed one file, we usually want the message defined there.
+         ;; But mapify gives everything.
+         ;; Let's pick the first message from the file we parsed?
+         ;; Rubberbuf result is {"filename" [ast]}.
+         ;; Mapify merges all.
+         ;; We need to find the main message from the AST of the specific file.
+         file-ast (get ast filename)
+         pkg (some #(when (= (first %) :package) (second %)) file-ast)
+
+         ;; Find top level messages in file-ast
+         top-msgs (->> file-ast
+                       (filter #(or (= (first %) :message) (= (first %) :enum)))
+                       (map second))
+
+         main-msg-name (last top-msgs) ;; Use last one as "main" as per previous logic?
+
+         main-key (if pkg
+                    (keyword pkg main-msg-name)
+                    (keyword main-msg-name))]
+
+     [:schema {:registry registry} main-key])))
+
+;; Alias parse for backward compat or if used
+(defn parse [content & args]
+  (throw (ex-info "Parsing from string content not directly supported by Rubberbuf wrapper yet, use parse-file." {})))
