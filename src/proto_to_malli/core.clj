@@ -69,10 +69,10 @@
   [(keyword identifier) [:map-of (resolve-type key-type) (resolve-type value-type)]])
 
 (defn transform-oneof-field [type identifier _number]
-  [(keyword identifier) {:optional true} (resolve-type type)])
+  [(keyword identifier) (resolve-type type)])
 
-(defn transform-oneof [_identifier & fields]
-  fields)
+(defn transform-oneof [identifier & fields]
+  [(keyword identifier) (into [:orn] (mapcat identity fields))])
 
 (defn transform-enum-field [identifier _number]
   (keyword identifier))
@@ -81,18 +81,7 @@
   [(keyword identifier) (into [:enum] fields)])
 
 (defn transform-message [identifier & fields]
-  (let [flat-fields (flatten fields)
-        ;; Flatten handles the oneof returning a list of fields
-        ;; But wait, oneof returns ([:k v] [:k2 v2])
-        ;; transform-message receives: identifier, [:k v], [:k2 v2], ([:k3 v3] [:k4 v4])
-        ;; I need to properly merge them.
-        normalized-fields (reduce (fn [acc item]
-                                    (if (and (seq? item) (vector? (first item)))
-                                      (into acc item)
-                                      (conj acc item)))
-                                  []
-                                  fields)
-        fields-map (into [:map] normalized-fields)]
+  (let [fields-map (into [:map] fields)]
     [(keyword identifier) fields-map]))
 
 (defn transform-package [pkg]

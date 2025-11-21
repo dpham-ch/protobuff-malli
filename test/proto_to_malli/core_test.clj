@@ -3,12 +3,12 @@
             [proto-to-malli.core :as sut]
             [clojure.edn :as edn]))
 
-(defn test-proto-file [name]
-  (let [proto-path (str "resources/" name ".proto")
-        edn-path (str "resources/" name ".edn")
+(defn test-proto-file [test-name]
+  (let [proto-path (str "resources/" test-name ".proto")
+        edn-path (str "resources/" test-name ".edn")
         expected (edn/read-string (slurp edn-path))
         actual (sut/parse-file proto-path)]
-    (is (= expected actual) (str "Failed for " name))))
+    (is (= expected actual) (str "Failed for " test-name))))
 
 (deftest simple-proto-test
   (testing "Parses simple.proto correctly"

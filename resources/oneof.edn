@@ -2,6 +2,5 @@
  {:registry
   {:SampleMessage
    [:map
-    [:name {:optional true} :string]
-    [:id {:optional true} :int]]}}
+    [:test_oneof [:orn :name :string :id :int]]]}}
  :SampleMessage]
