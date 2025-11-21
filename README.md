@@ -1,15 +1,61 @@
-# Plan
+# Proto to Malli
 
-2. Rewrite the read me file with the following content (make it professional, open, but concise).
+A Clojure library (compatible with Babashka) that parses Google Protobuf (`.proto`) files and converts them into Metosin Malli schemas.
 
-3. Constraints: the library needs to run in babashka (only clojure code, no Java or JavaScript or command line).
+## Goal
 
-4. Goal is to create a parser of Google protobuff file using Clojure instaparse into metosin/malli hiccup format with the registry format [:schema {:registry …} MessageType]
+The goal of this project is to provide a lightweight parser for Google Protobuf files using Instaparse, outputting the schema in Metosin Malli hiccup format with a registry.
 
-5. Add instaparse as dependency, add a resources folder.
+The output format follows:
+```clojure
+[:schema {:registry ...} MessageType]
+```
 
-6. Create a resource folder with example of simple protobuff definition from the official documentation , one file per example (.proto format)
+## Features
 
-7. For each of the example write the equivalent malli schema (files end with .edn)
+-   Parses `proto3` syntax.
+-   Converts Protobuf messages to Malli `[:map ...]` schemas.
+-   Handles standard Protobuf types (`string`, `int32`, etc.) mapping them to Malli predicates.
+-   Supports registry generation for multiple messages.
+-   Babashka compatible.
 
-8. Write test files in test folders.
+## Usage
+
+### Prerequisites
+
+-   Clojure or Babashka
+
+### Parsing a file
+
+```clojure
+(require '[proto-to-malli.core :as ptm])
+
+(def schema (ptm/parse-file "resources/simple.proto"))
+
+;; Output example:
+;; [:schema
+;;  {:registry
+;;   {:Person
+;;    [:map
+;;     [:name string?]
+;;     [:id int?]
+;;     [:email string?]]}}
+;;  :Person]
+```
+
+## Development
+
+### Directory Structure
+
+-   `src/proto_to_malli`: Source code.
+-   `test/proto_to_malli`: Tests.
+-   `resources`: Example `.proto` files and expected `.edn` outputs.
+
+### Dependencies
+
+-   [Instaparse](https://github.com/ Engelberg/instaparse)
+-   [Malli](https://github.com/metosin/malli) (optional, for usage of the schema)
+
+## License
+
+Open source.

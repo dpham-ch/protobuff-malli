@@ -1,0 +1,8 @@
+[:schema
+ {:registry
+  {:Person
+   [:map
+    [:name string?]
+    [:id int?]
+    [:email string?]]}}
+ :Person]
