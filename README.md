@@ -1,7 +1,5 @@
 # Plan
 
-1. Download the content of https://github.com/davidpham87/clojure_base_template as a zip and copy all the files except for .git and README.md
-
 2. Rewrite the read me file with the following content (make it professional, open, but concise).
 
 3. Constraints: the library needs to run in babashka (only clojure code, no Java or JavaScript or command line).
