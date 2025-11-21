@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message MapMessage {
+  map<string, int32> items = 1;
+  map<int32, string> lookup = 2;
+}

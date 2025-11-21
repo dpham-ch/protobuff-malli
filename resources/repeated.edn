@@ -1,0 +1,7 @@
+[:schema
+ {:registry
+  {:Repeated
+   [:map
+    [:names [:vector :string]]
+    [:ids [:vector :int]]]}}
+ :Repeated]

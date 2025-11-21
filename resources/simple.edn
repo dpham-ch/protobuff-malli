@@ -2,7 +2,7 @@
  {:registry
   {:Person
    [:map
-    [:name string?]
-    [:id int?]
-    [:email string?]]}}
+    [:name :string]
+    [:id :int]
+    [:email :string]]}}
  :Person]

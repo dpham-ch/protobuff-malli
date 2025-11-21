@@ -1,0 +1,7 @@
+[:schema
+ {:registry
+  {:SampleMessage
+   [:map
+    [:name {:optional true} :string]
+    [:id {:optional true} :int]]}}
+ :SampleMessage]
