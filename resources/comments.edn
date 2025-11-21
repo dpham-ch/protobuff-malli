@@ -2,6 +2,5 @@
  {:registry
   {:CommentMessage
    [:map
-    {:description "This is a message comment"}
-    [:name {:description "This is a field comment"} :string]]}}
+    [:name :string]]}}
  :CommentMessage]

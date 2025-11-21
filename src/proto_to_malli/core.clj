@@ -1,5 +1,7 @@
 (ns proto-to-malli.core
   (:require [rubberbuf.core :as rubber]
+            [rubberbuf.parse :as rubber-parse]
+            [rubberbuf.parse-textformat :as rubber-text]
             [rubberbuf.ast-postprocess :as post]
             [clojure.string :as str]
             [clojure.java.io :as io]))
@@ -20,7 +22,7 @@
    :bool     :boolean
    :string   :string
    :bytes    :bytes
-   :any      :any}) ;; google.protobuf.Any mapping if detected?
+   :any      :any})
 
 (def java-mapping
   {:double   :double
@@ -68,7 +70,6 @@
 (defn resolve-type [mapping type-str]
   (if (keyword? type-str)
     (get mapping type-str type-str)
-    ;; If it's a string, it's a reference to another message/enum
     (let [parts (str/split type-str #"/")
           t (if (> (count parts) 1)
               (keyword (str/join "." (butlast parts)) (last parts))
@@ -103,36 +104,24 @@
                                  [(keyword name) (resolve-type mapping (:type data))])
                                oneof-fields)
             schema (into [:orn] orn-fields)]
-         [k schema]) ;; Oneof usually doesn't have options on the group itself in Malli mapping, but fields do.
-                     ;; Rubberbuf structures oneof as a field container.
+         [k schema])
 
-      ;; Default case (required, optional, repeated)
       (let [base-type (resolve-type mapping type)
             schema (if (= context :repeated)
                      [:vector base-type]
                      base-type)]
-        ;; Check description in options?
-        ;; Rubberbuf seems to parse options.
         (if props
           [k props schema]
           [k schema])))))
 
 (defn transform-message [mapping msg-data]
   (let [fields (:fields msg-data)
-        ;; Fields is a map "name" -> data.
-        ;; We need to sort by field id (:fid) to be deterministic? Or just map.
-        ;; Malli map order doesn't strictly matter but nice for testing.
         sorted-fields (sort-by (fn [[_ v]] (:fid v)) fields)
         malli-fields (map (fn [[k v]] (transform-field mapping k v)) sorted-fields)]
     (into [:map] malli-fields)))
 
 (defn transform-enum [enum-data]
   (let [fields (:enum-fields enum-data)
-        ;; fields is "NAME" -> {:value 0 ...}
-        ;; We want [:enum :NAME ...]
-        ;; Wait, Malli :enum is usually values? `[:enum "ZERO" "ONE"]` or `[:enum :ZERO :ONE]`?
-        ;; My previous implementation used keywords `[:enum :ZERO :ONE]`.
-        ;; Rubberbuf gives strings.
         sorted-fields (sort-by (fn [[_ v]] (:value v)) fields)
         enums (map (fn [[k _]] (keyword k)) sorted-fields)]
     (into [:enum] enums)))
@@ -143,10 +132,26 @@
               (case (:context data)
                 :message (assoc registry k (transform-message mapping data))
                 :enum (assoc registry k (transform-enum data))
-                :service registry ;; Ignore services for now
+                :service registry
                 registry)))
           {}
           ast-map))
+
+(defn process-ast [ast mapping main-filename]
+  (let [unnested (post/unnest ast)
+        mapified (post/mapify unnested)
+        registry (transform-ast mapping mapified)
+
+        file-ast (get ast main-filename)
+        pkg (some #(when (= (first %) :package) (second %)) file-ast)
+        top-msgs (->> file-ast
+                      (filter #(or (= (first %) :message) (= (first %) :enum)))
+                      (map second))
+        main-msg-name (last top-msgs)
+        main-key (if pkg
+                   (keyword pkg main-msg-name)
+                   (keyword main-msg-name))]
+    [:schema {:registry registry} main-key]))
 
 (defn parse-file
   ([filepath] (parse-file filepath {}))
@@ -154,39 +159,22 @@
    (let [file (io/file filepath)
          dir (.getParent file)
          filename (.getName file)
-         ;; Rubberbuf protoc expects paths and files.
          ast (rubber/protoc [dir] [filename])
-         ;; Unnest and Mapify
-         unnested (post/unnest ast)
-         mapified (post/mapify unnested)
-         ;; Transform to Malli
-         mapping (get-mapping target)
-         registry (transform-ast mapping mapified)
+         mapping (get-mapping target)]
+     (process-ast ast mapping filename))))
 
-         ;; Determine the "main" type key.
-         ;; Rubberbuf map keys are qualified "package/Name".
-         ;; If we just parsed one file, we usually want the message defined there.
-         ;; But mapify gives everything.
-         ;; Let's pick the first message from the file we parsed?
-         ;; Rubberbuf result is {"filename" [ast]}.
-         ;; Mapify merges all.
-         ;; We need to find the main message from the AST of the specific file.
-         file-ast (get ast filename)
-         pkg (some #(when (= (first %) :package) (second %)) file-ast)
+(defn parse
+  "Parses Protobuf definition string to Malli schema."
+  ([content] (parse content {}))
+  ([content {:keys [target] :or {target :clojure}}]
+   (let [ast-vector (rubber-parse/parse content)
+         ;; Wrap in a virtual filename to reuse process-ast logic which expects a map {filename ast-vector}
+         virtual-filename "input.proto"
+         ast-map {virtual-filename ast-vector}
+         mapping (get-mapping target)]
+     (process-ast ast-map mapping virtual-filename))))
 
-         ;; Find top level messages in file-ast
-         top-msgs (->> file-ast
-                       (filter #(or (= (first %) :message) (= (first %) :enum)))
-                       (map second))
-
-         main-msg-name (last top-msgs) ;; Use last one as "main" as per previous logic?
-
-         main-key (if pkg
-                    (keyword pkg main-msg-name)
-                    (keyword main-msg-name))]
-
-     [:schema {:registry registry} main-key])))
-
-;; Alias parse for backward compat or if used
-(defn parse [content & args]
-  (throw (ex-info "Parsing from string content not directly supported by Rubberbuf wrapper yet, use parse-file." {})))
+(defn parse-text-format
+  "Parses Protobuf TextFormat string to Clojure map."
+  [content]
+  (rubber-text/parse content))

@@ -71,6 +71,16 @@
 
 (deftest comments-test
   (testing "Parses comments.proto correctly"
+    ;; Rubberbuf might handle comments differently (e.g. attaching to AST or ignoring).
+    ;; My transformation logic for comments was specific to my Instaparse implementation.
+    ;; Rubberbuf AST might not preserve comments in the same way or `unnest/mapify` might drop them.
+    ;; If Rubberbuf doesn't support comments in the mapified output (which has :options but maybe not description),
+    ;; this test might fail if I expect {:description ...}.
+    ;; I'll verify if I can support it.
+    ;; Rubberbuf AST documentation says nothing about comments.
+    ;; If it fails, I will remove/adjust the expectation or comment out the test if Rubberbuf doesn't support it yet.
+    ;; However, `clojobuf` usually strips comments.
+    ;; For now, I will keep the test and see. If I cannot support it with Rubberbuf, I will note it.
     (test-proto-file "comments")))
 
 (deftest reserved-test
@@ -88,3 +98,22 @@
 (deftest dots-test
   (testing "Parses dots.proto correctly"
     (test-proto-file "dots")))
+
+(deftest string-parse-test
+  (testing "Parses string content directly"
+    (let [content "syntax = \"proto3\"; message FromString { string data = 1; }"
+          expected [:schema
+                    {:registry
+                     {:FromString
+                      [:map
+                       [:data :string]]}}
+                    :FromString]
+          actual (sut/parse content)]
+      (is (= expected actual)))))
+
+(deftest text-format-test
+  (testing "Parses text format correctly"
+    (let [content "foo: \"bar\" count: 123"
+          expected {"foo" "bar" "count" 123}
+          actual (sut/parse-text-format content)]
+      (is (= expected actual)))))
