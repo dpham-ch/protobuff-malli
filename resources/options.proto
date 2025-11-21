@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message OptionsMessage {
+  string name = 1 [deprecated = true];
+  int32 id = 2 [custom_opt = "value"];
+  bool active = 3 [retry_count = 3];
+}

@@ -1,0 +1,6 @@
+[:schema
+ {:registry
+  {:ReservedMessage
+   [:map
+    [:name :string]]}}
+ :ReservedMessage]

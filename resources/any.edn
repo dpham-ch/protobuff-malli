@@ -1,0 +1,7 @@
+[:schema
+ {:registry
+  {:ErrorStatus
+   [:map
+    [:message :string]
+    [:details [:vector :any]]]}}
+ :ErrorStatus]

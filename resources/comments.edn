@@ -1,0 +1,6 @@
+[:schema
+ {:registry
+  {:CommentMessage
+   [:map
+    [:name :string]]}}
+ :CommentMessage]

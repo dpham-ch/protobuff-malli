@@ -1,0 +1,7 @@
+[:schema
+ {:registry
+  {:MapMessage
+   [:map
+    [:items [:map-of :string :int]]
+    [:lookup [:map-of :int :string]]]}}
+ :MapMessage]

@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+// This is a message comment
+message CommentMessage {
+  // This is a field comment
+  string name = 1;
+}

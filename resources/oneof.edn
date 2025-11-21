@@ -1,0 +1,6 @@
+[:schema
+ {:registry
+  {:SampleMessage
+   [:map
+    [:test_oneof [:orn :name :string :id :int]]]}}
+ :SampleMessage]

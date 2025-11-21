@@ -1,0 +1,11 @@
+[:schema
+ {:registry
+  {:Result
+   [:map
+    [:url :string]
+    [:title :string]
+    [:snippets [:vector :string]]]
+   :SearchResponse
+   [:map
+    [:results [:vector :Result]]]}}
+ :SearchResponse]

@@ -1,0 +1,9 @@
+[:schema
+ {:registry
+  {:Outer
+   [:map
+    [:inner :Outer.Inner]]
+   :Outer.Inner
+   [:map
+    [:val :int]]}}
+ :Outer]

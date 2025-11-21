@@ -1,0 +1,10 @@
+[:schema
+ {:registry
+  {:Corpus [:enum :UNIVERSAL :WEB :IMAGES :LOCAL :NEWS :PRODUCTS :VIDEO]
+   :SearchRequest
+   [:map
+    [:query :string]
+    [:page_number :int]
+    [:result_per_page :int]
+    [:corpus :Corpus]]}}
+ :SearchRequest]

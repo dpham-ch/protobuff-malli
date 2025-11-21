@@ -1,0 +1,21 @@
+[:schema
+ {:registry
+  {:Scalars
+   [:map
+    [:d :double]
+    [:f :double]
+    [:i32 :int]
+    [:i64 :int]
+    [:u32 :int]
+    [:u64 :int]
+    [:si32 :int]
+    [:si64 :int]
+    [:f32 :int]
+    [:f64 :int]
+    [:sf32 :int]
+    [:sf64 :int]
+    [:b :boolean]
+    [:s :string]
+    [:by :bytes] ;; Assuming :bytes is available or I will alias it
+    ]}}
+ :Scalars]

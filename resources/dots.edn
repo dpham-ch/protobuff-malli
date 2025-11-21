@@ -1,0 +1,6 @@
+[:schema
+ {:registry
+  {:Dotted
+   [:map
+    [:field :foo.bar/Open]]}}
+ :Dotted]

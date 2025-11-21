@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message Repeated {
+  repeated string names = 1;
+  repeated int32 ids = 2;
+}
