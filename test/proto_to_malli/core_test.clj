@@ -15,8 +15,31 @@
     (test-proto-file "simple")))
 
 (deftest scalars-test
-  (testing "Parses scalars.proto correctly"
-    (test-proto-file "scalars")))
+  (testing "Parses scalars.proto correctly with default target"
+    (test-proto-file "scalars"))
+
+  (testing "Parses scalars.proto correctly with Java target"
+    (let [actual (sut/parse-file "resources/scalars.proto" {:target :java})
+          registry (:registry (second actual))
+          scalars (get registry :Scalars)
+          fields (into {} (rest scalars))]
+       (is (= :double (:d fields)))
+       (is (= :float (:f fields)))
+       (is (= :int (:i32 fields)))
+       (is (= :long (:i64 fields))) ;; int64 -> :long
+       (is (= :long (:u64 fields)))
+       (is (= :bytes (:by fields)))))
+
+  (testing "Parses scalars.proto correctly with JS target"
+    (let [actual (sut/parse-file "resources/scalars.proto" {:target :js})
+          registry (:registry (second actual))
+          scalars (get registry :Scalars)
+          fields (into {} (rest scalars))]
+       (is (= :double (:d fields))) ;; float -> double
+       (is (= :int (:i32 fields)))
+       (is (= :string (:i64 fields))) ;; int64 -> :string
+       (is (= :string (:u64 fields)))
+       (is (= :string (:by fields)))))) ;; bytes -> :string
 
 (deftest enum-test
   (testing "Parses enum.proto correctly"

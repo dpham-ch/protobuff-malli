@@ -38,7 +38,7 @@
 (def parser
   (insta/parser proto-grammar :auto-whitespace :standard))
 
-(def type-mapping
+(def default-mapping
   {"double"   :double
    "float"    :double
    "int32"    :int
@@ -56,20 +56,63 @@
    "bytes"    :bytes
    "google.protobuf.Any" :any})
 
-(defn resolve-type [t]
-  (get type-mapping t (keyword t)))
+(def java-mapping
+  {"double"   :double
+   "float"    :float
+   "int32"    :int
+   "int64"    :long
+   "uint32"   :int
+   "uint64"   :long
+   "sint32"   :int
+   "sint64"   :long
+   "fixed32"  :int
+   "fixed64"  :long
+   "sfixed32" :int
+   "sfixed64" :long
+   "bool"     :boolean
+   "string"   :string
+   "bytes"    :bytes ;; byte[]
+   "google.protobuf.Any" :any})
+
+(def js-mapping
+  {"double"   :double   ;; Number
+   "float"    :double   ;; Number
+   "int32"    :int      ;; Number
+   "int64"    :string   ;; String
+   "uint32"   :int      ;; Number
+   "uint64"   :string   ;; String
+   "sint32"   :int      ;; Number
+   "sint64"   :string   ;; String
+   "fixed32"  :int      ;; Number
+   "fixed64"  :string   ;; String
+   "sfixed32" :int      ;; Number
+   "sfixed64" :string   ;; String
+   "bool"     :boolean
+   "string"   :string
+   "bytes"    :string   ;; base64 string
+   "google.protobuf.Any" :any})
+
+(defn get-mapping [target]
+  (case target
+    :java java-mapping
+    :js js-mapping
+    :clojure default-mapping
+    default-mapping))
+
+(defn resolve-type [mapping t]
+  (get mapping t (keyword t)))
 
 (defn transform-field
-  ([type identifier _number]
-   [(keyword identifier) (resolve-type type)])
-  ([_repeated type identifier _number]
-   [(keyword identifier) [:vector (resolve-type type)]]))
+  ([mapping type identifier _number]
+   [(keyword identifier) (resolve-type mapping type)])
+  ([mapping _repeated type identifier _number]
+   [(keyword identifier) [:vector (resolve-type mapping type)]]))
 
-(defn transform-map-field [key-type value-type identifier _number]
-  [(keyword identifier) [:map-of (resolve-type key-type) (resolve-type value-type)]])
+(defn transform-map-field [mapping key-type value-type identifier _number]
+  [(keyword identifier) [:map-of (resolve-type mapping key-type) (resolve-type mapping value-type)]])
 
-(defn transform-oneof-field [type identifier _number]
-  [(keyword identifier) (resolve-type type)])
+(defn transform-oneof-field [mapping type identifier _number]
+  [(keyword identifier) (resolve-type mapping type)])
 
 (defn transform-oneof [identifier & fields]
   [(keyword identifier) (into [:orn] (mapcat identity fields))])
@@ -98,30 +141,35 @@
         last-type-key (some-> types last first qualify)]
     [:schema {:registry registry} last-type-key]))
 
-(defn parse [proto-content]
-  (let [parsed (parser proto-content)]
-    (if (insta/failure? parsed)
-      parsed
-      (insta/transform
-       {:FIELD transform-field
-        :MAP_FIELD transform-map-field
-        :ONEOF transform-oneof
-        :ONEOF_FIELD transform-oneof-field
-        :ENUM_FIELD transform-enum-field
-        :ENUM transform-enum
-        :MESSAGE transform-message
-        :PROTO transform-proto
-        :PACKAGE transform-package
-        :TYPE str
-        :KEY_TYPE str
-        :SCALAR str
-        :IDENTIFIER str
-        :DOTTED_IDENTIFIER str
-        :NUMBER str
-        :SYNTAX (fn [_] nil)
-        :IMPORTS (fn [& _] nil)
-        :REPEATED str}
-       parsed))))
+(defn parse
+  ([proto-content] (parse proto-content {}))
+  ([proto-content {:keys [target] :or {target :clojure}}]
+   (let [parsed (parser proto-content)
+         mapping (get-mapping target)]
+     (if (insta/failure? parsed)
+       parsed
+       (insta/transform
+        {:FIELD (partial transform-field mapping)
+         :MAP_FIELD (partial transform-map-field mapping)
+         :ONEOF transform-oneof
+         :ONEOF_FIELD (partial transform-oneof-field mapping)
+         :ENUM_FIELD transform-enum-field
+         :ENUM transform-enum
+         :MESSAGE transform-message
+         :PROTO transform-proto
+         :PACKAGE transform-package
+         :TYPE str
+         :KEY_TYPE str
+         :SCALAR str
+         :IDENTIFIER str
+         :DOTTED_IDENTIFIER str
+         :NUMBER str
+         :SYNTAX (fn [_] nil)
+         :IMPORTS (fn [& _] nil)
+         :REPEATED str}
+        parsed)))))
 
-(defn parse-file [filepath]
-  (parse (slurp filepath)))
+(defn parse-file
+  ([filepath] (parse-file filepath {}))
+  ([filepath opts]
+   (parse (slurp filepath) opts)))
