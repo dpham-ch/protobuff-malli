@@ -64,3 +64,7 @@
 (deftest any-test
   (testing "Parses any.proto correctly"
     (test-proto-file "any")))
+
+(deftest options-test
+  (testing "Parses options.proto correctly"
+    (test-proto-file "options")))

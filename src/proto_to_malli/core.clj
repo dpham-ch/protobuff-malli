@@ -14,8 +14,12 @@
 
   MESSAGE = <'message'> IDENTIFIER <'{'> (FIELD | MAP_FIELD | ONEOF)* <'}'>
 
-  FIELD = REPEATED? TYPE IDENTIFIER <'='> NUMBER <';'>
+  FIELD = REPEATED? TYPE IDENTIFIER <'='> NUMBER OPTIONS? <';'>
   REPEATED = 'repeated'
+
+  OPTIONS = <'['> OPTION ( <','> OPTION )* <']'>
+  OPTION = IDENTIFIER <'='> CONSTANT
+  CONSTANT = #'[^,\\]]+'
 
   MAP_FIELD = <'map'> <'<'> KEY_TYPE <','> TYPE <'>'> IDENTIFIER <'='> NUMBER <';'>
   KEY_TYPE = 'int32' | 'int64' | 'uint32' | 'uint64' | 'sint32' | 'sint64' |
@@ -102,11 +106,29 @@
 (defn resolve-type [mapping t]
   (get mapping t (keyword t)))
 
+(defn parse-value [v]
+  (cond
+    (= v "true") true
+    (= v "false") false
+    (re-matches #"^\".*\"$" v) (subs v 1 (dec (count v)))
+    (re-matches #"^[0-9]+$" v) (Integer/parseInt v)
+    :else v))
+
+(defn transform-option [k v]
+  [(keyword k) (parse-value v)])
+
+(defn transform-options [& opts]
+  (into {} opts))
+
 (defn transform-field
   ([mapping type identifier _number]
    [(keyword identifier) (resolve-type mapping type)])
   ([mapping _repeated type identifier _number]
-   [(keyword identifier) [:vector (resolve-type mapping type)]]))
+   [(keyword identifier) [:vector (resolve-type mapping type)]])
+  ([mapping type identifier _number options]
+    [(keyword identifier) options (resolve-type mapping type)])
+  ([mapping _repeated type identifier _number options]
+    [(keyword identifier) options [:vector (resolve-type mapping type)]]))
 
 (defn transform-map-field [mapping key-type value-type identifier _number]
   [(keyword identifier) [:map-of (resolve-type mapping key-type) (resolve-type mapping value-type)]])
@@ -166,7 +188,10 @@
          :NUMBER str
          :SYNTAX (fn [_] nil)
          :IMPORTS (fn [& _] nil)
-         :REPEATED str}
+         :REPEATED str
+         :OPTION transform-option
+         :OPTIONS transform-options
+         :CONSTANT str}
         parsed)))))
 
 (defn parse-file
