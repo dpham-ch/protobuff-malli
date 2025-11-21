@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+message Outer {
+  message Inner {
+    int32 val = 1;
+  }
+  Inner inner = 1;
+}

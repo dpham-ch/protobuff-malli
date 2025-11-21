@@ -68,3 +68,23 @@
 (deftest options-test
   (testing "Parses options.proto correctly"
     (test-proto-file "options")))
+
+(deftest comments-test
+  (testing "Parses comments.proto correctly"
+    (test-proto-file "comments")))
+
+(deftest reserved-test
+  (testing "Parses reserved.proto correctly"
+    (test-proto-file "reserved")))
+
+(deftest ignore-test
+  (testing "Parses ignore.proto correctly"
+    (test-proto-file "ignore")))
+
+(deftest nested-types-test
+  (testing "Parses nested_types.proto correctly"
+    (test-proto-file "nested_types")))
+
+(deftest dots-test
+  (testing "Parses dots.proto correctly"
+    (test-proto-file "dots")))

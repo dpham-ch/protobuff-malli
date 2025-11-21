@@ -1,0 +1,6 @@
+[:schema
+ {:registry
+  {:IgnoreMessage
+   [:map
+    [:name :string]]}}
+ :IgnoreMessage]
