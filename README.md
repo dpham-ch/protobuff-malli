@@ -75,4 +75,4 @@ The output format follows:
 
 ## License
 
-Open source.
+Apache License 2.0
